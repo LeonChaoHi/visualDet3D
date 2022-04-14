@@ -7,9 +7,17 @@ import time
 from visualDet3D.networks.lib.blocks import AnchorFlatten, ConvBnReLU
 from visualDet3D.networks.lib.ghost_module import ResGhostModule, GhostModule
 from visualDet3D.networks.lib.PSM_cost_volume import PSMCosineModule, CostVolume
-from visualDet3D.networks.backbones import resnet
+from visualDet3D.networks.backbones import resnet, ghostnet
 from visualDet3D.networks.backbones.resnet import BasicBlock
+from visualDet3D.networks.backbones.ghostnet import *
 from visualDet3D.networks.lib.look_ground import LookGround
+
+'''
+    Stereo 3d core
+    including backbone and neck
+    backbone: resnet
+    neck: PSVolume, 
+'''
 
 class CostVolumePyramid(nn.Module):
     """Some Information about CostVolumePyramid"""
@@ -101,11 +109,11 @@ class YoloStereo3DCore(nn.Module):
     """
     def __init__(self, backbone_arguments):
         super(YoloStereo3DCore, self).__init__()
-        self.backbone =resnet(**backbone_arguments)
-
-        base_features = 256 if backbone_arguments['depth'] > 34 else 64
+        self.backbone =resnet(**backbone_arguments) # resnet_34 # TODO: backbone defined here
+        base_features = 256 if backbone_arguments['depth'] > 34 else 64   #TODO: base features: output channels
+        # self.backbone = ghost_net()
+        # base_features = 12
         self.neck = StereoMerging(base_features)
-
 
     def forward(self, images):
 

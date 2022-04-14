@@ -1,0 +1,8 @@
+
+# registry
+including 5 registry dicts
+DATASET_DICT
+BACKBONE_DICT   backbone (actually not used)
+DETECTOR_DICT   entire model
+PIPELINE_DICT   eval pipeline
+AUGMENTATION_DICT

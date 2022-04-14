@@ -53,3 +53,4 @@ def main(config:str="config/config.py",
     print('finish')
 if __name__ == '__main__':
     fire.Fire(main)
+    # main("../config/myyolo3d.py", 0, '../runs/Stereo3D/checkpoint/Stereo3D_34.pth', 'test')

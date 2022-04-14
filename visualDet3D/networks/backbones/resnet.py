@@ -272,6 +272,7 @@ def resnet(depth, **kwargs):
 if __name__ == '__main__':
     model = resnet18(False).cuda()
     model.eval()
+    print(model)
     image = torch.rand(2, 3, 224, 224).cuda()
     
     output = model(image)

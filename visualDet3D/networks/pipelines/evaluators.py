@@ -1,4 +1,5 @@
 import os
+import time
 from tqdm import tqdm
 from easydict import EasyDict
 from typing import Sized, Sequence
@@ -9,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+from thop import profile, clever_format     # package for calculating FLOPs and params
 from visualDet3D.networks.utils.registry import PIPELINE_DICT
 from visualDet3D.evaluator.kitti.evaluate import evaluate
 from visualDet3D.evaluator.kitti_depth_prediction.evaluate_depth import evaluate_depth
@@ -72,6 +74,8 @@ def evaluate_kitti_obj(cfg:EasyDict,
                        result_path_split='validation'
                        ):
     model.eval()
+    # calculate FLOPs and params
+    # show_profile(0, dataset_val, model)
     result_path = os.path.join(cfg.path.preprocessed_path, result_path_split, 'data')
     if os.path.isdir(result_path):
         os.system("rm -r {}".format(result_path))
@@ -81,11 +85,17 @@ def evaluate_kitti_obj(cfg:EasyDict,
     test_func = PIPELINE_DICT[cfg.trainer.test_func]
     projector = BBox3dProjector().cuda()
     backprojector = BackProjection().cuda()
+    # inference on each sample in dataset
+    time_start = time.time()
     for index in tqdm(range(len(dataset_val))):
         test_one(cfg, index, dataset_val, model, test_func, backprojector, projector, result_path)
+    time_end = time.time()
+    print('totally inference time: ', time_end - time_start, ' s.')
+    print('average time: ', (time_end - time_start) / len(dataset_val))
     if "is_running_test_set" in cfg and cfg["is_running_test_set"]:
         print("Finish evaluation.")
         return
+    # evaluate test result
     result_texts = evaluate(
         label_path=os.path.join(cfg.path.data_path, 'label_2'),
         result_path=result_path,
@@ -144,3 +154,20 @@ def test_one(cfg, index, dataset, model, test_func, backprojector:BackProjection
         if isinstance(scores, torch.Tensor):
             scores = scores.detach().cpu().numpy()
         write_result_to_file(result_path, index, scores, bbox_2d, obj_types=obj_names)
+
+def show_profile(index, dataset, model):
+    data = dataset[index]
+    if isinstance(data['calib'], list):
+        P2 = data['calib'][0]
+    else:
+        P2 = data['calib']
+    original_height = data['original_shape'][0]
+    collated_data = dataset.collate_fn([data])
+    left_images, right_images, P2, P3 = collated_data[0], collated_data[1], collated_data[2], collated_data[3]
+    scores, bbox, obj_index = model([left_images.cuda().float().contiguous(), right_images.cuda().float().contiguous(),
+                                     torch.tensor(P2).cuda().float(), torch.tensor(P3).cuda().float()])
+    model_input = [left_images.cuda().float().contiguous(), right_images.cuda().float().contiguous(),
+                   torch.tensor(P2).cuda().float(), torch.tensor(P3).cuda().float()]
+    macs, params = profile(model, inputs=model_input)
+    macs, params = clever_format([macs, params], "%.3f")
+    print("FLOPs and params computation done.")

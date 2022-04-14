@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 import math
 import time
-from torchvision.ops import nms
+# from torchvision.ops import nms   # TODO: commented
 from visualDet3D.networks.utils import DETECTOR_DICT
 from visualDet3D.networks.utils.utils import BBoxTransform, ClipBoxes
 from visualDet3D.networks.heads.anchors import Anchors

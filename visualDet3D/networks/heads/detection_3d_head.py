@@ -7,7 +7,6 @@ from easydict import EasyDict
 import numpy as np
 from typing import List, Tuple, Dict
 
-
 from visualDet3D.networks.heads.losses import SigmoidFocalLoss, ModifiedSmoothL1Loss
 from visualDet3D.networks.heads.anchors import Anchors
 from visualDet3D.networks.utils.utils import calc_iou, BackProjection, BBox3dProjector

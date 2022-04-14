@@ -7,7 +7,8 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torch.nn.modules.utils import _pair, _single
 
-if (torch.version.cuda < '10.0') or (torch.__version__ < '1.3'):
+# TODO:  forced to select 1st option
+if True or (torch.version.cuda < '10.0') or (torch.__version__ < '1.3'):
     import warnings
     warnings.warn("Cuda version lower than 10.0 and torch version lower than 1.3 may not support the compilation of Deformable Conv, but the other part of the package will be fine", RuntimeWarning)
     class ModulatedDeformConvPack(nn.Module):

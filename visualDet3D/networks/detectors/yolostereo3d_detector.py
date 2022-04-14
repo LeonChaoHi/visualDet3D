@@ -11,7 +11,11 @@ from visualDet3D.networks.heads.detection_3d_head import StereoHead
 from visualDet3D.networks.lib.blocks import AnchorFlatten, ConvBnReLU
 from visualDet3D.networks.backbones.resnet import BasicBlock
 
-
+'''
+    Stereo 3D network
+    including core(backbone and neck), head
+    and training and testing forward method
+'''
 
 @DETECTOR_DICT.register_module
 class Stereo3D(nn.Module):
@@ -19,6 +23,11 @@ class Stereo3D(nn.Module):
         Stereo3D
     """
     def __init__(self, network_cfg):
+        """
+        Args:
+            network_cfg: cfg.detector
+            network_cfg.backbone: cfg.detector.backbone
+        """
         super(Stereo3D, self).__init__()
 
         self.obj_types = network_cfg.obj_types

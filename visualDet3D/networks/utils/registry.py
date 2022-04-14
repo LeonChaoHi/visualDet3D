@@ -27,7 +27,7 @@ class Registry(object):
     def _register_module(self, module_class, force=False):
         """Register a module.
         Args:
-            module : Module to be registered.
+            module : Module to be registered. module_class is a class or function
         """
         if (not inspect.isclass(module_class)) and (not inspect.isfunction(module_class)):
             raise TypeError('module must be a class or function, but got {}'.format(
@@ -36,7 +36,7 @@ class Registry(object):
         if not force and module_name in self._module_dict:
             raise KeyError('{} is already registered in {}'.format(
                 module_name, self.name))
-        self._module_dict[module_name] = module_class
+        self._module_dict[module_name] = module_class   # class or function object
 
     def register_module(self, cls=None):
         self._register_module(cls)

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torchvision.ops import nms
+# from torchvision.ops import nms   # TODO: commented
 import numpy as np
 from functools import partial
 from visualDet3D.networks.heads.anchors import Anchors
