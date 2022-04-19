@@ -8,7 +8,7 @@ cfg.obj_types = ['Car', 'Pedestrian']
 ## trainer
 trainer = edict(
     gpu = 0,
-    max_epochs = 80, # for validation epoch 50 is enough    #TODO: batch size
+    max_epochs = 50, # for validation epoch 50 is enough    #TODO: batch size
     disp_iter = 100,
     save_iter = 5,
     test_iter = 10,

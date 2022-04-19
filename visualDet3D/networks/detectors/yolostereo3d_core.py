@@ -7,7 +7,7 @@ import time
 from visualDet3D.networks.lib.blocks import AnchorFlatten, ConvBnReLU
 from visualDet3D.networks.lib.ghost_module import ResGhostModule, GhostModule
 from visualDet3D.networks.lib.PSM_cost_volume import PSMCosineModule, CostVolume
-from visualDet3D.networks.backbones import resnet, ghostnet
+from visualDet3D.networks.backbones import resnet, ghostnet, ghost_resnet
 from visualDet3D.networks.backbones.resnet import BasicBlock
 from visualDet3D.networks.backbones.ghostnet import *
 from visualDet3D.networks.lib.look_ground import LookGround
@@ -18,6 +18,39 @@ from visualDet3D.networks.lib.look_ground import LookGround
     backbone: resnet
     neck: PSVolume, 
 '''
+
+
+class FPN(nn.Module):
+    def __init__(self):
+        super(FPN, self).__init__()
+        self.in_planes = 64
+
+        # Smooth layers
+        self.smooth2 = nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1)
+        self.smooth1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+
+        # Lateral layers
+        self.latlayer3 = nn.Conv2d(256, 128, kernel_size=1, stride=1, padding=0)
+        self.latlayer2 = nn.Conv2d(128, 64, kernel_size=1, stride=1, padding=0)
+
+    def _upsample_add(self, x, y):
+        _, _, H, W = y.size()
+        return F.upsample(x, size=(H, W), mode='bilinear') + y
+
+    def forward(self, x):
+        # Bottom-up
+        c1 = x[0]
+        c2 = x[1]
+        c3 = x[2]
+        # Top-down
+        p3 = c3  # 256 channels
+        p2 = self._upsample_add(self.latlayer3(p3), c2)  # 128 cnannels
+        p1 = self._upsample_add(self.latlayer2(p2), c1)  # 64 cnannels
+        # Smooth
+        p2 = self.smooth2(p2)
+        p1 = self.smooth1(p1)
+        return p1, p2, p3
+
 
 class CostVolumePyramid(nn.Module):
     """Some Information about CostVolumePyramid"""
@@ -109,11 +142,18 @@ class YoloStereo3DCore(nn.Module):
     """
     def __init__(self, backbone_arguments):
         super(YoloStereo3DCore, self).__init__()
-        self.backbone =resnet(**backbone_arguments) # resnet_34 # TODO: backbone defined here
-        base_features = 256 if backbone_arguments['depth'] > 34 else 64   #TODO: base features: output channels
-        # self.backbone = ghost_net()
-        # base_features = 12
+        # TODO: backbone defined here. ** stand for trans arguments by dict
+        ''' original backbone '''
+        self.backbone =resnet(**backbone_arguments) # resnet_34
+        base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        ''' ghost resnet '''
+        # self.backbone = ghost_resnet(**backbone_arguments)
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        ''' FPN module '''
+        self.fpn = FPN()
+        ''' neck '''
         self.neck = StereoMerging(base_features)
+
 
     def forward(self, images):
 
@@ -121,11 +161,12 @@ class YoloStereo3DCore(nn.Module):
         left_images = images[:, 0:3, :, :]
         right_images = images[:, 3:, :, :]
 
-        images = torch.cat([left_images, right_images], dim=0)
+        images = torch.cat([left_images, right_images], dim=0)      # concat left_images and right_images in batch dim
 
         features = self.backbone(images)
+        features = self.fpn(features)   # FPN
 
-        left_features  = [feature[0:batch_size] for feature in features]
+        left_features  = [feature[0:batch_size] for feature in features]    # split features from left and right images
         right_features = [feature[batch_size:]  for feature in features]
 
         features, depth_output = self.neck(left_features, right_features)

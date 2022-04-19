@@ -168,7 +168,7 @@ class GhostNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-@BACKBONE_DICT.register_module
+# @BACKBONE_DICT.register_module
 def ghost_net(**kwargs):
     """
     Constructs a GhostNet model
