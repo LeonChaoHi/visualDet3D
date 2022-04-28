@@ -171,3 +171,19 @@ def show_profile(index, dataset, model):
     macs, params = profile(model, inputs=model_input)
     macs, params = clever_format([macs, params], "%.3f")
     print("FLOPs and params computation done.")
+
+
+    dump_input = data
+
+    # Warn-up
+    for _ in range(5):
+        start = time.time()
+        outputs = model(dump_input)
+        torch.cuda.synchronize()
+        end = time.time()
+        print('Time:{}ms'.format((end - start) * 1000))
+
+    with torch.autograd.profiler.profile(enabled=True, use_cuda=True, record_shapes=False,
+                                         profile_memory=False) as prof:
+        outputs = model(dump_input)
+    print(prof.table())

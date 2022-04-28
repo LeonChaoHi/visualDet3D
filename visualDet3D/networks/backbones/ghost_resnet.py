@@ -366,8 +366,8 @@ if __name__ == '__main__':
     output = model(image)
     for y in output:
         print(y.shape)
-
-    fpn_model = FPN().cuda()
-    output2 = fpn_model(output)
-    for y in output2:
-        print(y.shape)
+    #
+    # fpn_model = FPN().cuda()
+    # output2 = fpn_model(output)
+    # for y in output2:
+    #     print(y.shape)

@@ -21,7 +21,9 @@ cfg.trainer = trainer
 
 ## path
 path = edict()
-path.pretrained_checkpoint = None # 若接着训练，则将None改成存档路径
+# TODO: 若接着训练，则将 pretrained_checkpoint = None 改成存档路径
+path.pretrained_checkpoint = None
+# path.pretrained_checkpoint = "/home/lc/LeonChao/visualDet3D/runs/Stereo3D/checkpoint/Stereo3D_49.pth"
 path.data_path = "/home/e712/CAI/object/object/training" # used in visualDet3D/data/.../dataset
 path.test_path = "/home/e712/CAI/object/object/testing" # used in visualDet3D/data/.../dataset
 path.visualDet3D_path = "/home/lc/LeonChao/visualDet3D/visualDet3D" # The path should point to the inner subfolder
@@ -76,7 +78,7 @@ cfg.scheduler = scheduler
 
 ## data #TODO: 修改split
 data = edict(
-    batch_size = 8,
+    batch_size = 3,
     num_workers = 4,
     rgb_shape = (288, 1280, 3),
     train_dataset = "KittiStereoDataset",

@@ -42,10 +42,11 @@ class Stereo3D(nn.Module):
         self.core = YoloStereo3DCore(network_cfg.backbone)
 
     def build_head(self, network_cfg):
+        # bbox 预测头部分 (c)(d)
         self.bbox_head = StereoHead(
             **(network_cfg.head)
         )
-
+        # 深度预测部分 (e) 的后半部分
         self.disparity_loss = losses.DisparityLoss(maxdisp=96)
 
     def train_forward(self, left_images, right_images, annotations, P2, P3, disparity=None):

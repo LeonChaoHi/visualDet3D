@@ -6,6 +6,7 @@ import torch.optim as optim
 import math
 import torch.utils.model_zoo as model_zoo
 from visualDet3D.networks.utils.registry import BACKBONE_DICT
+from thop import profile, clever_format     # package for calculating FLOPs and params
 def conv3x3(in_planes, out_planes, stride=1, dilation=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
@@ -265,7 +266,7 @@ def resnet152(pretrained=True, **kwargs):
         model.load_state_dict(model_zoo.load_url(model_urls['resnet152'], model_dir='.'), strict=False)
     return model
 
-@BACKBONE_DICT.register_module
+# @BACKBONE_DICT.register_module
 def resnet(depth, **kwargs):
     if depth == 18:
         model = resnet18(**kwargs)
@@ -286,6 +287,19 @@ if __name__ == '__main__':
     model = resnet18(False).cuda()
     model.eval()
     print(model)
-    image = torch.rand(2, 3, 224, 224).cuda()
+    image = torch.rand(2, 3, 288, 1280).cuda()
     
     output = model(image)
+
+    model_input = image
+    macs, params = profile(model, (model_input,))
+    macs, params = clever_format([macs, params], "%.3f")
+    print('FLOPs:', macs)
+    print('params:', params)
+    print("FLOPs and params computation done.\n")
+
+    print("start profiling inferencing time.")
+    with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
+        model(model_input)
+    print(prof)
+    prof.export_chrome_trace('./resnet_profile.json')
