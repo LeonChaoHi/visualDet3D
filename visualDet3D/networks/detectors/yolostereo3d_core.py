@@ -7,7 +7,7 @@ import time
 from visualDet3D.networks.lib.blocks import AnchorFlatten, ConvBnReLU
 from visualDet3D.networks.lib.ghost_module import ResGhostModule, GhostModule
 from visualDet3D.networks.lib.PSM_cost_volume import PSMCosineModule, CostVolume
-from visualDet3D.networks.backbones import resnet, ghostnet, ghost_resnet, mobilenet_v2
+from visualDet3D.networks.backbones import resnet, ghostnet, ghost_resnet, mobilenet_v2, shufflenet_v2_customized
 from visualDet3D.networks.backbones.resnet import BasicBlock
 from visualDet3D.networks.backbones.ghostnet import *
 from visualDet3D.networks.lib.look_ground import LookGround
@@ -52,6 +52,66 @@ class FPN(nn.Module):
         return p1, p2, p3
 
 
+class HourGlass(nn.Module):
+    def __init__(self, depth_channel_4, depth_channel_8, depth_channel_16):
+        super(HourGlass, self).__init__()
+        self.depth_channel_4 = depth_channel_4  # 24
+        self.depth_channel_8 = depth_channel_8  # 24
+        self.depth_channel_16 = depth_channel_16  # 96
+
+        input_features = depth_channel_4 # 24
+        self.four_ghost = ResGhostModule(input_features, 3 * input_features, 3, ratio=3)
+        self.four_to_eight = nn.Sequential(
+            nn.AvgPool2d(2),
+            BasicBlock(3 * input_features, 3 * input_features),
+        )
+        input_features = 3 * input_features + depth_channel_8 # 3 * 24 + 24 = 96
+        self.eight_ghost = ResGhostModule(input_features, 3 * input_features, 3, ratio=3)
+        self.eight_to_sixteen = nn.Sequential(
+            nn.AvgPool2d(2),
+            BasicBlock(3 * input_features, 3 * input_features),
+        )
+        input_features = 3 * input_features + depth_channel_16 # 3 * 96 + 96 = 384
+        self.depth_reason = nn.Sequential(
+            ResGhostModule(input_features, 3 * input_features, kernel_size=3, ratio=3),
+            BasicBlock(3 * input_features, 3 * input_features),
+        )
+        self.output_channel_num = 3 * input_features #1152
+
+        # TODO: depth output 修改
+        self.HG1 = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),                   # s = 8, c = 1152
+            nn.Conv2d(self.output_channel_num, int(self.output_channel_num/2), 3, padding=1),   # c = 576
+            nn.BatchNorm2d(int(self.output_channel_num/2)),                                    # c = 576, add after this
+        )
+        self.HG2 = nn.Sequential(
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),   # s = 4, c = 576
+            nn.Conv2d(int(self.output_channel_num/2) + 288, int(self.output_channel_num/4), 3, padding=1),    # c = 288
+            nn.BatchNorm2d(int(self.output_channel_num/4)),                     # c = 288, add after this
+        )
+        self.HG3 = nn.Sequential(
+            nn.ReLU(),
+            nn.Conv2d(int(self.output_channel_num/4) + 72, 96, 1),
+        )
+
+    def forward(self, psv_volume_4, psv_volume_8, psv_volume_16):
+        psv_4 = self.four_ghost(psv_volume_4)                       # new : s = 4, c = 72
+        psv_4_8 = self.four_to_eight(psv_4)                         # s = 8, c = 72
+        psv_volume_8 = torch.cat([psv_4_8, psv_volume_8], dim=1)    # s = 8, c = 96
+        psv_8 = self.eight_ghost(psv_volume_8)                      # new : s = 8, c = 288
+        psv_8_16 = self.eight_to_sixteen(psv_8)                     # s = 16, c = 288
+        psv_volume_16 = torch.cat([psv_8_16, psv_volume_16], dim=1) # s = 16, c = 384
+        psv_16 = self.depth_reason(psv_volume_16)                   # s = 16, c = 1152
+        if self.training:
+            feat_8 = self.HG1(psv_16)
+            feat_8 = torch.cat([feat_8, psv_8], dim=1)
+            feat_4 = self.HG2(feat_8)
+            feat_4 = torch.cat([feat_4, psv_4], dim=1)
+            return psv_16, self.HG3(feat_4)
+        return psv_16, torch.zeros([psv_volume_4.shape[0], 1, psv_volume_4.shape[2], psv_volume_4.shape[3]])
+
+
 class CostVolumePyramid(nn.Module):
     """Some Information about CostVolumePyramid"""
     def __init__(self, depth_channel_4, depth_channel_8, depth_channel_16):
@@ -90,24 +150,24 @@ class CostVolumePyramid(nn.Module):
 
         # TODO: depth output 修改
         self.depth_output = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-            nn.Conv2d(self.output_channel_num, int(self.output_channel_num/2), 3, padding=1),
-            nn.BatchNorm2d(int(self.output_channel_num/2)),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),   # s = 8, c = 1152
+            nn.Conv2d(self.output_channel_num, int(self.output_channel_num/2), 3, padding=1),   # c = 576
+            nn.BatchNorm2d(int(self.output_channel_num/2)), # c = 576
             nn.ReLU(),
-            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-            nn.Conv2d(int(self.output_channel_num/2), int(self.output_channel_num/4), 3, padding=1),
-            nn.BatchNorm2d(int(self.output_channel_num/4)),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),   # s = 4, c = 576
+            nn.Conv2d(int(self.output_channel_num/2), int(self.output_channel_num/4), 3, padding=1),    # c = 288
+            nn.BatchNorm2d(int(self.output_channel_num/4)), # c = 288
             nn.ReLU(),
             nn.Conv2d(int(self.output_channel_num/4), 96, 1),
         )
 
 
     def forward(self, psv_volume_4, psv_volume_8, psv_volume_16):
-        psv_4_8 = self.four_to_eight(psv_volume_4)
-        psv_volume_8 = torch.cat([psv_4_8, psv_volume_8], dim=1)
-        psv_8_16 = self.eight_to_sixteen(psv_volume_8)
-        psv_volume_16 = torch.cat([psv_8_16, psv_volume_16], dim=1)
-        psv_16 = self.depth_reason(psv_volume_16)
+        psv_4_8 = self.four_to_eight(psv_volume_4)                  # s = 8, c = 72
+        psv_volume_8 = torch.cat([psv_4_8, psv_volume_8], dim=1)    # add : s = 8, c = 96
+        psv_8_16 = self.eight_to_sixteen(psv_volume_8)              # s = 16, c = 288
+        psv_volume_16 = torch.cat([psv_8_16, psv_volume_16], dim=1) # s = 16, c = 384
+        psv_16 = self.depth_reason(psv_volume_16)                   # s = 16, c = 1152
         if self.training:
             return psv_16, self.depth_output(psv_16)
         return psv_16, torch.zeros([psv_volume_4.shape[0], 1, psv_volume_4.shape[2], psv_volume_4.shape[3]])
@@ -124,7 +184,8 @@ class StereoMerging(nn.Module):
         self.cost_volume_2 = CostVolume(downsample_scale=16, max_disp=192, input_features=base_features * 4, PSM_features=8)
         PSV_depth_2 = self.cost_volume_2.output_channel
 
-        self.depth_reasoning = CostVolumePyramid(PSV_depth_0, PSV_depth_1, PSV_depth_2)
+        # self.depth_reasoning = CostVolumePyramid(PSV_depth_0, PSV_depth_1, PSV_depth_2)
+        self.depth_reasoning = HourGlass(PSV_depth_0, PSV_depth_1, PSV_depth_2)     # TODO : new merging structure
         self.final_channel = self.depth_reasoning.output_channel_num + base_features * 4
 
     def forward(self, left_x, right_x):
@@ -147,14 +208,17 @@ class YoloStereo3DCore(nn.Module):
         super(YoloStereo3DCore, self).__init__()
         # TODO: backbone defined here. ** stand for trans arguments by dict
         ''' original backbone '''
-        # self.backbone =resnet(**backbone_arguments) # resnet_34
-        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        self.backbone =resnet(**backbone_arguments) # resnet_34
+        base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
         ''' ghost resnet '''
         # self.backbone = ghost_resnet(**backbone_arguments)
         # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
         ''' mobilenet v2 '''
-        self.backbone = mobilenet_v2()
-        base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        # self.backbone = mobilenet_v2()
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        ''' shufflenet v2 '''
+        # self.backbone = shufflenet_v2_customized()
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels == 64
         ''' FPN module '''
         self.fpn = FPN()
         ''' neck '''

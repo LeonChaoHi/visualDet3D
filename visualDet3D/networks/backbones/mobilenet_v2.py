@@ -130,15 +130,15 @@ class MobileNetV2(nn.Module):
         stage1_setting = [
             [6, 32, 3, 1],
             [6, 64, 1, 1],
-        ]
+        ]   # 56*56*64
         stage2_setting = [
             [6, 48, 5, 2],
             [6, 128, 1, 1],
-        ]
+        ]   # 28*28*128
         stage3_setting = [
             [6, 96, 3, 2],
             [6, 256, 1, 1],
-        ]
+        ]   # 14*14*256
 
         # building first layer
         input_channel = _make_divisible(input_channel * width_mult, round_nearest)

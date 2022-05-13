@@ -114,10 +114,11 @@ class DoublePSMCosineModule(PSMCosineModule):
 
 
 if __name__ == "__main__":
-    model = DoublePSMCosineModule(max_disp=192, downsample_scale=16).cuda()
-    left_feature = torch.randn(2, 128, 12, 56, requires_grad=True, device="cuda:0")
-    right_feature = torch.randn(2, 128, 12, 56, requires_grad=True, device="cuda:0")
-    output = model(left_feature, right_feature, 0, 0) #currently dummy
+    # model = DoublePSMCosineModule(max_disp=192, downsample_scale=16).cuda()
+    model = CostVolume(max_disp=192, downsample_scale=16, input_features=64, PSM_features=8).cuda()
+    left_feature = torch.randn(2, 64, 12, 56, requires_grad=True, device="cuda:0")
+    right_feature = torch.randn(2, 64, 12, 56, requires_grad=True, device="cuda:0")
+    output = model(left_feature, right_feature) #currently dummy
     mean_1 = output.mean() 
     mean_1.backward()
     print(left_feature.grad.std())
