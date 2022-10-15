@@ -6,6 +6,7 @@ import torch.optim as optim
 import math
 import torch.utils.model_zoo as model_zoo
 from visualDet3D.networks.utils.registry import BACKBONE_DICT
+from thop import profile, clever_format     # package for calculating FLOPs and params
 
 
 def conv3x3(in_planes, out_planes, stride=1, dilation=1):
@@ -55,7 +56,7 @@ class BasicBlock(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None, dilation=1):
         super(BasicBlock, self).__init__()
         # self.conv1 = conv3x3(inplanes, planes, stride)
-        self.conv1 = GhostModule(inplanes, planes, kernel_size=3, stride=stride)
+        self.conv1 = GhostModule(inplanes, planes, kernel_size=3, stride=stride)    # 原来的conv2d
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
         # self.conv2 = conv3x3(planes, planes, dilation=dilation)
@@ -358,16 +359,24 @@ if __name__ == '__main__':
                          out_indices=(0, 1, 2),
                          norm_eval=True,
                          dilations=(1, 1, 1),
-                         ).cuda()
+                         )
     model.eval()
     print(model)
-    image = torch.rand(2, 3, 224, 224).cuda()
+    image = torch.rand(2, 3, 288, 1280)
 
     output = model(image)
     for y in output:
         print(y.shape)
+
+    model_input = image
+    macs, params = profile(model, (model_input,))
+    macs, params = clever_format([macs, params], "%.3f")
+    print('FLOPs:', macs)
+    print('params:', params)
+    print("FLOPs and params computation done.\n")
     #
-    # fpn_model = FPN().cuda()
-    # output2 = fpn_model(output)
-    # for y in output2:
-    #     print(y.shape)
+    # print("start profiling inferencing time.")
+    # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
+    #     model(model_input)
+    # print(prof)
+    # prof.export_chrome_trace('./mobilenet_v2_profile.json')

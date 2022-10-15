@@ -284,12 +284,14 @@ def resnet(depth, **kwargs):
     return model
 
 if __name__ == '__main__':
-    model = resnet18(False).cuda()
+    model = resnet34(False, num_stages=3, out_indices=[0,1,2])
     model.eval()
     print(model)
-    image = torch.rand(2, 3, 288, 1280).cuda()
+    image = torch.rand(2, 3, 288, 1280)
     
     output = model(image)
+    for y in output:
+        print(y.shape)
 
     model_input = image
     macs, params = profile(model, (model_input,))
@@ -297,9 +299,9 @@ if __name__ == '__main__':
     print('FLOPs:', macs)
     print('params:', params)
     print("FLOPs and params computation done.\n")
-
-    print("start profiling inferencing time.")
-    with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
-        model(model_input)
-    print(prof)
-    prof.export_chrome_trace('./resnet_profile.json')
+    #
+    # print("start profiling inferencing time.")
+    # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
+    #     model(model_input)
+    # print(prof)
+    # prof.export_chrome_trace('./resnet_profile.json')

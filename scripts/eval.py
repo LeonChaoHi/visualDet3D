@@ -52,5 +52,5 @@ def main(config:str="config/config.py",
     evaluate_detection(cfg, detector, dataset, None, 0, result_path_split=split_to_test)
     print('finish')
 if __name__ == '__main__':
-    fire.Fire(main)
-    # main("../config/myyolo3d.py", 0, '../runs/Stereo3D/checkpoint/Stereo3D_34.pth', 'test')
+    # fire.Fire(main)
+    main("../config/myyolo3d.py", 0, '../runs/Stereo3D/checkpoint/Stereo3D_64.pth', 'validation')

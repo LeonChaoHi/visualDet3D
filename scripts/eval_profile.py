@@ -35,6 +35,7 @@ from visualDet3D.networks.lib.fast_utils.hill_climbing import post_opt
 """
 
 print('CUDA available: {}'.format(torch.cuda.is_available()))
+save_name = './resnet_profile.json'
 
 @torch.no_grad()
 def evaluate_kitti_obj(cfg: EasyDict,
@@ -123,7 +124,7 @@ def show_profile(index, dataset, model):
     with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
         model(model_input)
     print(prof)
-    prof.export_chrome_trace('./resnet_profile.json')
+    prof.export_chrome_trace(save_name)
 
 def main(config:str="config/myyolo3d.py",
         gpu:int=0, 
@@ -163,4 +164,5 @@ def main(config:str="config/myyolo3d.py",
 
 
 if __name__ == '__main__':
-    main("../config/myyolo3d.py", 0, "../runs/Stereo3D/model_results/0426_Stereo3D_49.pth") # TODO: path
+    save_name = './resnet_profile.json'
+    main("../config/myyolo3d.py", 0, "../runs/Stereo3D/model_results/1203_Stereo3D_latest.pth") # TODO: path

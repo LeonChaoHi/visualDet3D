@@ -7,9 +7,8 @@ import time
 from visualDet3D.networks.lib.blocks import AnchorFlatten, ConvBnReLU
 from visualDet3D.networks.lib.ghost_module import ResGhostModule, GhostModule
 from visualDet3D.networks.lib.PSM_cost_volume import PSMCosineModule, CostVolume
-from visualDet3D.networks.backbones import resnet, ghostnet, ghost_resnet, mobilenet_v2, shufflenet_v2_customized
+from visualDet3D.networks.backbones import resnet, ghost_net, ghost_resnet, mobilenet_v2, shufflenet_v2_customized
 from visualDet3D.networks.backbones.resnet import BasicBlock
-from visualDet3D.networks.backbones.ghostnet import *
 from visualDet3D.networks.lib.look_ground import LookGround
 
 '''
@@ -184,8 +183,9 @@ class StereoMerging(nn.Module):
         self.cost_volume_2 = CostVolume(downsample_scale=16, max_disp=192, input_features=base_features * 4, PSM_features=8)
         PSV_depth_2 = self.cost_volume_2.output_channel
 
-        # self.depth_reasoning = CostVolumePyramid(PSV_depth_0, PSV_depth_1, PSV_depth_2)
-        self.depth_reasoning = HourGlass(PSV_depth_0, PSV_depth_1, PSV_depth_2)     # TODO : new merging structure
+        # TODO : new merging structure
+        self.depth_reasoning = CostVolumePyramid(PSV_depth_0, PSV_depth_1, PSV_depth_2)
+        # self.depth_reasoning = HourGlass(PSV_depth_0, PSV_depth_1, PSV_depth_2)
         self.final_channel = self.depth_reasoning.output_channel_num + base_features * 4
 
     def forward(self, left_x, right_x):
@@ -208,14 +208,17 @@ class YoloStereo3DCore(nn.Module):
         super(YoloStereo3DCore, self).__init__()
         # TODO: backbone defined here. ** stand for trans arguments by dict
         ''' original backbone '''
-        self.backbone =resnet(**backbone_arguments) # resnet_34
-        base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        self.backbone = resnet(**backbone_arguments) # resnet_34
+        base_features = 256 if backbone_arguments['depth'] > 34 else 64
+        ''' ghost net '''
+        # self.backbone = ghost_net()
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64
         ''' ghost resnet '''
         # self.backbone = ghost_resnet(**backbone_arguments)
-        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64
         ''' mobilenet v2 '''
         # self.backbone = mobilenet_v2()
-        # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels
+        # base_features = 256 if backbone_arguments['depth'] > 34 else 64
         ''' shufflenet v2 '''
         # self.backbone = shufflenet_v2_customized()
         # base_features = 256 if backbone_arguments['depth'] > 34 else 64   # TODO: base features: output channels == 64
@@ -234,7 +237,7 @@ class YoloStereo3DCore(nn.Module):
         images = torch.cat([left_images, right_images], dim=0)      # concat left_images and right_images in batch dim
 
         features = self.backbone(images)
-        # features = self.fpn(features)   # TODO: FPN
+        features = self.fpn(features)   # TODO: FPN
 
         left_features  = [feature[0:batch_size] for feature in features]    # split features from left and right images
         right_features = [feature[batch_size:]  for feature in features]

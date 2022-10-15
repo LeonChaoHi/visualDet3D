@@ -22,8 +22,8 @@ cfg.trainer = trainer
 ## path
 path = edict()
 # TODO: 若接着训练，则将 pretrained_checkpoint = None 改成存档路径
-# path.pretrained_checkpoint = None
-path.pretrained_checkpoint = "/home/lc/LeonChao/visualDet3D/runs/Stereo3D/model_results/0513_Stereo3D_latest.pth"
+path.pretrained_checkpoint = None
+# path.pretrained_checkpoint = "/home/lc/LeonChao/visualDet3D/runs/Stereo3D/model_results/0422_Stereo3D_79.pth"
 path.data_path = "/home/e712/CAI/object/object/training" # used in visualDet3D/data/.../dataset
 path.test_path = "/home/e712/CAI/object/object/testing" # used in visualDet3D/data/.../dataset
 path.visualDet3D_path = "/home/lc/LeonChao/visualDet3D/visualDet3D" # The path should point to the inner subfolder

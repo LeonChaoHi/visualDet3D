@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import math
 from visualDet3D.networks.utils.registry import BACKBONE_DICT
+from thop import profile, clever_format     # package for calculating FLOPs and params
 
 
 __all__ = ['ghost_net']
@@ -85,13 +86,13 @@ class GhostBottleneck(nn.Module):
         assert stride in [1, 2]
 
         self.conv = nn.Sequential(
-            # pw
+            # pw    point wise (use ghost module)
             GhostModule(inp, hidden_dim, kernel_size=1, relu=True),
-            # dw
+            # dw    depth wise  (use groupconv BN ReLU)
             depthwise_conv(hidden_dim, hidden_dim, kernel_size, stride, relu=False) if stride==2 else nn.Sequential(),
             # Squeeze-and-Excite
             SELayer(hidden_dim) if use_se else nn.Sequential(),
-            # pw-linear
+            # pw-linear     point wise
             GhostModule(hidden_dim, oup, kernel_size=1, relu=False),
         )
 
@@ -113,10 +114,34 @@ class GhostNet(nn.Module):
         super(GhostNet, self).__init__()
         # setting of inverted residual blocks
         self.cfgs = cfgs
+        self.cfg1 = [
+            # k, t, c, SE, s
+            # kernel_size, hidden_channel, out channels, sqeeze-and-excite, stride
+            [3,  16,  16, 0, 1],
+            [3,  48,  24, 0, 2],
+            [3,  72,  24, 0, 1],
+            [5,  72,  40, 1, 1],
+            [5, 120,  64, 1, 1]
+        ]
+        self.cfg2 = [
+            [3, 240,  80, 0, 2],
+            [3, 200,  80, 0, 1],
+            [3, 184,  80, 0, 1],
+            [3, 184,  80, 0, 1],
+            [3, 480, 112, 1, 1],
+            [3, 672, 128, 1, 1],
+        ]
+        self.cfg3 = [
+            [5, 672, 160, 1, 2],
+            [5, 960, 160, 0, 1],
+            [5, 960, 160, 1, 1],
+            [5, 960, 160, 0, 1],
+            [5, 960, 256, 1, 1]
+        ]
 
         # building first layer
         output_channel = _make_divisible(16 * width_mult, 4)
-        layers = [nn.Sequential(
+        layers1 = [nn.Sequential(
             nn.Conv2d(3, output_channel, 3, 2, 1, bias=False),
             nn.BatchNorm2d(output_channel),
             nn.ReLU(inplace=True)
@@ -125,40 +150,64 @@ class GhostNet(nn.Module):
 
         # building inverted residual blocks
         block = GhostBottleneck
-        for k, exp_size, c, use_se, s in self.cfgs:
+        for k, exp_size, c, use_se, s in self.cfg1:
             output_channel = _make_divisible(c * width_mult, 4)
             hidden_channel = _make_divisible(exp_size * width_mult, 4)
-            layers.append(block(input_channel, hidden_channel, output_channel, k, s, use_se))
+            layers1.append(block(input_channel, hidden_channel, output_channel, k, s, use_se))
+            # (self, inp, hidden_dim, oup, kernel_size, stride, use_se)
             input_channel = output_channel
-        self.features = nn.Sequential(*layers)
+        self.features1 = nn.Sequential(*layers1)
+
+        layers2 = []
+        for k, exp_size, c, use_se, s in self.cfg2:
+            output_channel = _make_divisible(c * width_mult, 4)
+            hidden_channel = _make_divisible(exp_size * width_mult, 4)
+            layers2.append(block(input_channel, hidden_channel, output_channel, k, s, use_se))
+            # (self, inp, hidden_dim, oup, kernel_size, stride, use_se)
+            input_channel = output_channel
+        self.features2 = nn.Sequential(*layers2)
+
+        layers3 = []
+        for k, exp_size, c, use_se, s in self.cfg3:
+            output_channel = _make_divisible(c * width_mult, 4)
+            hidden_channel = _make_divisible(exp_size * width_mult, 4)
+            layers3.append(block(input_channel, hidden_channel, output_channel, k, s, use_se))
+            # (self, inp, hidden_dim, oup, kernel_size, stride, use_se)
+            input_channel = output_channel
+        self.features3 = nn.Sequential(*layers3)
 
         # building last several layers
-        output_channel = _make_divisible(exp_size * width_mult, 4)
-        self.squeeze = nn.Sequential(
-            nn.Conv2d(input_channel, output_channel, 1, 1, 0, bias=False),
-            nn.BatchNorm2d(output_channel),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1)),
-        )
-        input_channel = output_channel
+        # output_channel = _make_divisible(exp_size * width_mult, 4)
+        # output_channel = _make_divisible(256, 4)
+        # self.squeeze = nn.Sequential(
+        #     nn.Conv2d(input_channel, output_channel, 1, 1, 0, bias=False),
+        #     nn.BatchNorm2d(output_channel),
+        #     nn.ReLU(inplace=True),
+        #     nn.AdaptiveAvgPool2d((1, 1)),
+        # )
+        # input_channel = output_channel
+        #
+        # output_channel = 1280
+        # self.classifier = nn.Sequential(
+        #     nn.Linear(input_channel, output_channel, bias=False),
+        #     nn.BatchNorm1d(output_channel),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(0.2),
+        #     nn.Linear(output_channel, num_classes),
+        # )
 
-        output_channel = 1280
-        self.classifier = nn.Sequential(
-            nn.Linear(input_channel, output_channel, bias=False),
-            nn.BatchNorm1d(output_channel),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.2),
-            nn.Linear(output_channel, num_classes),
-        )
-
-        self._initialize_weights()
+        # self._initialize_weights()
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.squeeze(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
+        outs = []
+        x1 = self.features1(x)
+        outs.append(x1)
+        x2 = self.features2(x1)
+        outs.append(x2)
+        x3 = self.features3(x2)
+        # x3 = self.squeeze(x3)
+        outs.append(x3)
+        return outs
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -175,6 +224,7 @@ def ghost_net(**kwargs):
     """
     cfgs = [
         # k, t, c, SE, s
+        # kernel_size, hidden_channel, out channels, sqeeze-and-excite, stride
         [3,  16,  16, 0, 1],
         [3,  48,  24, 0, 2],
         [3,  72,  24, 0, 1],
@@ -197,8 +247,29 @@ def ghost_net(**kwargs):
 
 if __name__=='__main__':
     model = ghost_net()
+    # model.eval()
+    # print(model)
+    # input = torch.randn(32,3,224,224)
+    # y = model(input)
+    # print(y)
+    model = ghost_net().cuda()
     model.eval()
     print(model)
-    input = torch.randn(32,3,224,224)
-    y = model(input)
-    print(y)
+    image = torch.rand(2, 3, 288, 1280).cuda()
+
+    output = model(image)
+    for y in output:
+        print(y.shape)
+
+    model_input = image
+    macs, params = profile(model, (model_input,))
+    macs, params = clever_format([macs, params], "%.3f")
+    print('FLOPs:', macs)
+    print('params:', params)
+    print("FLOPs and params computation done.\n")
+
+    print("start profiling inferencing time.")
+    with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True) as prof:
+        model(model_input)
+    print(prof)
+    prof.export_chrome_trace('./mobilenet_v2_profile.json')

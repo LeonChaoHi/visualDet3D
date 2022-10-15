@@ -85,6 +85,7 @@ class InvertedResidual(nn.Module):
 
 class ShuffleNetV2(nn.Module):
     def __init__(self, stages_repeats, stages_out_channels, num_classes=1000, inverted_residual=InvertedResidual):
+        # [4, 8, 4], [24, 64, 128, 256, 1024], **kwargs)
         super(ShuffleNetV2, self).__init__()
 
         if len(stages_repeats) != 3:
@@ -209,7 +210,7 @@ if __name__ == '__main__':
     model = shufflenet_v2_customized().cuda()
     model.eval()
     print(model)
-    image = torch.rand(2, 3, 224, 224).cuda()
+    image = torch.rand(2, 3, 288, 1280).cuda()
 
     output = model(image)
     for y in output:
